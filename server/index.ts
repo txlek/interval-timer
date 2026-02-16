@@ -14,7 +14,6 @@ app.post("/api/webhook", (req, res) => {
   console.log("Данные от Telegram:", JSON.stringify(req.body, null, 2));
   res.sendStatus(200);
 });
-
 // 2. Отправка сообщений В Телеграм (вызывается фронтендом)
 app.post("/api/alert", async (req, res) => {
   const { chatId, message } = req.body;
