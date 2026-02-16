@@ -127,6 +127,7 @@ export function useTimer(
             playFinishSound(finishVolRef.current);
           });
           notifyFinished();
+          triggerTelegramAlert(`🏁 Таймер завершен! Пора отдохнуть.`);
           setState((s) => ({ ...s, remainingSeconds: 0, isRunning: false, isPaused: false }));
           break;
         case "stopped":
