@@ -4,11 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "server": "node server/index.js",
-    "build": "npx vite build",
-    "lint": "eslint .",
-    "preview": "vite preview"
+  "dev": "vite",
+  "server": "tsx server/index.ts", 
+  "build": "npx vite build",
+  "start": "tsx server/index.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",
