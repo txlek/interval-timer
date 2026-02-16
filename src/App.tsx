@@ -25,9 +25,9 @@ function App() {
   return (
     <div className="min-h-screen text-slate-100 flex flex-col items-center py-6 px-4">
       <header className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Interval Timer</h1>
+        <h1 className="text-2xl font-bold text-white">Интервальный таймер</h1>
         <p className="text-slate-400 text-sm mt-1">
-          Total: {n} min • Alert every: {m} min
+          Всего: {n} мин • Напоминание каждые: {m} мин
         </p>
       </header>
 
@@ -43,7 +43,7 @@ function App() {
         {!state.isRunning && (
           <div className="w-full grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-slate-500 block mb-1">Total (N) min</label>
+              <label className="text-xs text-slate-500 block mb-1">Всего (N) мин</label>
               <input
                 type="number"
                 min={1}
@@ -54,7 +54,7 @@ function App() {
               />
             </div>
             <div>
-              <label className="text-xs text-slate-500 block mb-1">Interval (M) min</label>
+              <label className="text-xs text-slate-500 block mb-1">Интервал (M) мин</label>
               <input
                 type="number"
                 min={1}
@@ -78,17 +78,17 @@ function App() {
         />
 
         <div className="w-full space-y-4">
-          <h2 className="text-sm font-medium text-slate-400">Sounds</h2>
+          <h2 className="text-sm font-medium text-slate-400">Звуки</h2>
           <AudioUploadZone
             type="interval"
-            label="Interval Sound"
+            label="Звук интервала"
             volume={intervalVolume}
             onVolumeChange={setIntervalVolume}
             onFileSaved={handleResetAudio}
           />
           <AudioUploadZone
             type="finish"
-            label="Finish Sound"
+            label="Звук окончания"
             volume={finishVolume}
             onVolumeChange={setFinishVolume}
             onFileSaved={handleResetAudio}

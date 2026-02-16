@@ -38,7 +38,7 @@ export function UnlockButton({ onUnlocked }: UnlockButtonProps) {
       className="w-full flex items-center justify-center gap-3 py-4 px-6 rounded-xl bg-amber-500/20 border-2 border-amber-500/60 text-amber-400 font-semibold hover:bg-amber-500/30 transition-colors"
     >
       <Volume2 className="w-5 h-5" />
-      {loading ? "Activating…" : "Activate Sound & Notifications"}
+      {loading ? "Активация…" : "Включить звук и уведомления"}
     </button>
   );
 }

@@ -39,7 +39,7 @@ export function AudioUploadZone({
     async (file: File) => {
       setError(null);
       if (!isFormatSupported(file.name)) {
-        setError("Supported: .mp3, .wav, .m4a");
+        setError("Форматы: .mp3, .wav, .m4a");
         return;
       }
       try {
@@ -48,7 +48,7 @@ export function AudioUploadZone({
         setHasCustom(true);
         onFileSaved?.();
       } catch {
-        setError("Failed to save");
+        setError("Не удалось сохранить");
       }
     },
     [type, onFileSaved]
@@ -99,7 +99,7 @@ export function AudioUploadZone({
             className="ml-auto flex items-center gap-1 text-xs text-amber-400 hover:text-amber-300"
           >
             <RotateCcw className="w-3 h-3" />
-            Reset to Default
+            Сбросить по умолчанию
           </button>
         )}
       </div>
@@ -126,7 +126,7 @@ export function AudioUploadZone({
           onChange={handleInput}
         />
         <p className="text-slate-400 text-sm">
-          {hasCustom ? "Custom sound loaded" : "Drop file or click to upload"}
+          {hasCustom ? "Свой звук загружен" : "Перетащите файл или нажмите для загрузки"}
         </p>
         <p className="text-slate-500 text-xs mt-1">.mp3, .wav, .m4a</p>
         {error && <p className="text-red-400 text-xs mt-2">{error}</p>}
@@ -148,7 +148,7 @@ export function AudioUploadZone({
           onClick={handlePreview}
           className="text-xs text-sky-400 hover:text-sky-300"
         >
-          Preview
+          Прослушать
         </button>
       </div>
     </div>

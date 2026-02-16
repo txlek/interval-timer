@@ -28,7 +28,7 @@ export function TimerControls({
           className="flex-1 flex items-center justify-center gap-2 py-4 px-6 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-semibold transition-colors"
         >
           <Play className="w-5 h-5" fill="currentColor" />
-          Start
+          Старт
         </button>
       </div>
     );
@@ -43,7 +43,7 @@ export function TimerControls({
           className="flex-1 flex items-center justify-center gap-2 py-4 px-6 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-white font-semibold transition-colors"
         >
           <Play className="w-5 h-5" fill="currentColor" />
-          Resume
+          Продолжить
         </button>
       ) : (
         <button
@@ -52,7 +52,7 @@ export function TimerControls({
           className="flex-1 flex items-center justify-center gap-2 py-4 px-6 rounded-xl bg-amber-500 hover:bg-amber-400 text-white font-semibold transition-colors"
         >
           <Pause className="w-5 h-5" fill="currentColor" />
-          Pause
+          Пауза
         </button>
       )}
       <button

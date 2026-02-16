@@ -88,7 +88,7 @@ export function CircularProgress({
         <span className="text-5xl font-bold tabular-nums text-white tracking-tight">
           {formatTime(remainingSeconds)}
         </span>
-        <span className="text-slate-400 text-sm mt-1">remaining</span>
+        <span className="text-slate-400 text-sm mt-1">осталось</span>
       </div>
     </div>
   );

@@ -36,11 +36,11 @@ export function showNotification(title: string, body: string): void {
 
 export function notifyInterval(m: number): void {
   showNotification(
-    `${m} minutes passed!`,
-    `Your timer has reached the ${m}-minute interval.`
+    `Прошло ${m} мин!`,
+    `Таймер достиг ${m}-минутного интервала.`
   );
 }
 
 export function notifyFinished(): void {
-  showNotification("Time's up!", "Your timer has completed.");
+  showNotification("Время вышло!", "Таймер завершён.");
 }
