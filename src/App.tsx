@@ -62,15 +62,50 @@ function App() {
         {!state.isRunning && (
           <div className="w-full grid grid-cols-2 gap-3">
             <div>
-              <label className="text-xs text-slate-500 block mb-1">Всего (мин)</label>
-              <input
-                type="number"
-                value={n === 0 ? "" : n}
-                onChange={(e) => setN(e.target.value === "" ? 0 : parseInt(e.target.value))}
-                onBlur={() => { if (n < 1) setN(1); }}
-                className="w-full rounded-lg bg-slate-800 border border-slate-600 px-3 py-2 text-white text-center"
-              />
-            </div>
+  <label className="text-xs text-slate-500 block mb-1">Всего (мин)</label>
+  <input
+    type="number"
+    inputMode="numeric" // Помогает телефонам открыть цифровую клавиатуру
+    value={n === 0 ? "" : n}
+    onChange={(e) => {
+      const val = e.target.value;
+      // Позволяем полю быть пустым во время редактирования
+      if (val === "") {
+        setN(0); 
+      } else {
+        const parsed = parseInt(val);
+        if (!isNaN(parsed)) setN(parsed);
+      }
+    }}
+    // Только когда пользователь "ушел" из поля, ставим минимум 1
+    onBlur={() => {
+      if (n < 1) setN(1);
+    }}
+    className="w-full rounded-lg bg-slate-800 border border-slate-600 px-3 py-2 text-white text-center"
+  />
+</div>
+
+<div>
+  <label className="text-xs text-slate-500 block mb-1">Интервал (мин)</label>
+  <input
+    type="number"
+    inputMode="numeric"
+    value={m === 0 ? "" : m}
+    onChange={(e) => {
+      const val = e.target.value;
+      if (val === "") {
+        setM(0);
+      } else {
+        const parsed = parseInt(val);
+        if (!isNaN(parsed)) setM(parsed);
+      }
+    }}
+    onBlur={() => {
+      if (m < 1) setM(1);
+    }}
+    className="w-full rounded-lg bg-slate-800 border border-slate-600 px-3 py-2 text-white text-center"
+  />
+</div>
             <div>
               <label className="text-xs text-slate-500 block mb-1">Интервал (мин)</label>
               <input
