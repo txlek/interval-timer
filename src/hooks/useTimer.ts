@@ -140,10 +140,30 @@ export function useTimer(n: number, m: number, intervalVolume: number, finishVol
     setState(s => ({ ...s, isRunning: false }));
   };
 
-  const reset = () => {
-    workerRef.current?.postMessage({ type: "reset" });
-    setState(s => ({ ...s, isRunning: false, isPaused: false, remainingSeconds: n * 60 }));
-  };
+ // Заменяем старую функцию reset на эту, чтобы она учитывала новые n и m
+ const reset = useCallback(() => {
+  workerRef.current?.postMessage({ type: "reset" });
+  const total = n * 60;
+  setState({
+    remainingSeconds: total,
+    totalSeconds: total,
+    isRunning: false,
+    isPaused: false,
+    intervalSeconds: m * 60,
+  });
+}, [n, m]);
 
-  return { state, start, pause, resume, stop, reset };
+useEffect(() => {
+ 
+  if (!state.isRunning) {
+    setState(prev => ({
+      ...prev,
+      remainingSeconds: n * 60,
+      totalSeconds: n * 60,
+      intervalSeconds: m * 60,
+    }));
+  }
+}, [n, m, state.isRunning]);
+
+return { state, start, pause, resume, stop, reset };
 }
