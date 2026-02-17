@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-// Если какие-то пути подсвечены красным - не страшно, главное чтобы сами файлы существовали
 import { playIntervalSound, playFinishSound, unlockAudio } from "@/lib/audioEngine";
 import { notifyInterval, notifyFinished, requestNotificationPermission } from "@/lib/notifications";
 import { triggerTelegramAlert } from "@/lib/telegram";
@@ -12,9 +11,8 @@ export interface TimerState {
   intervalSeconds: number;
 }
 
-// Эта функция должна быть ВНЕ хука useTimer
 function getMinuteDeclension(n: number): string {
-  const absN = Math.abs(n) % 100;
+  const absN = Math.max(0, Math.floor(n)) % 100;
   const n1 = absN % 10;
   if (absN > 10 && absN < 20) return "минут";
   if (n1 > 1 && n1 < 5) return "минуты";
@@ -34,14 +32,10 @@ export function useTimer(n: number, m: number, intervalVolume: number, finishVol
   const workerRef = useRef<Worker | null>(null);
   const intervalVolRef = useRef(intervalVolume);
   const finishVolRef = useRef(finishVolume);
-  
-  // Обновляем рефы при изменении громкости
   intervalVolRef.current = intervalVolume;
   finishVolRef.current = finishVolume;
 
   useEffect(() => {
-    // ВЕСЬ КОД ВОРКЕРА В ОДНОЙ СТРОКЕ (безопасно для копирования)
-    // Мы используем обычную строку, чтобы избежать конфликтов с кавычками
     const workerCode = `
       let intervalId = null;
       let remainingSeconds = 0;
@@ -53,19 +47,17 @@ export function useTimer(n: number, m: number, intervalVolume: number, finishVol
       function tick() {
         if (isPaused) return;
         remainingSeconds--;
-        self.postMessage({ type: "tick", remainingSeconds: remainingSeconds });
-        
+        self.postMessage({ type: "tick", remainingSeconds });
         if (intervalMarks.has(remainingSeconds)) {
-          self.postMessage({ type: "interval", remainingSeconds: remainingSeconds });
+          self.postMessage({ type: "interval", remainingSeconds });
         }
-        
         if (remainingSeconds <= 0) {
           self.postMessage({ type: "finished" });
-          clearInterval(intervalId);
+          if (intervalId) clearInterval(intervalId);
         }
       }
 
-      self.onmessage = function(e) {
+      self.onmessage = (e) => {
         const msg = e.data;
         if (msg.type === "start") {
           remainingSeconds = msg.totalSeconds;
@@ -73,20 +65,16 @@ export function useTimer(n: number, m: number, intervalVolume: number, finishVol
           intervalSeconds = msg.intervalSeconds;
           isPaused = false;
           intervalMarks.clear();
-          // Рассчитываем точки срабатывания
           for (let s = totalSeconds - intervalSeconds; s > 0; s -= intervalSeconds) {
             intervalMarks.add(s);
           }
           if (intervalId) clearInterval(intervalId);
           intervalId = setInterval(tick, 1000);
-        } 
-        else if (msg.type === "pause") {
+        } else if (msg.type === "pause") {
           isPaused = true;
-        } 
-        else if (msg.type === "resume") {
+        } else if (msg.type === "resume") {
           isPaused = false;
-        } 
-        else if (msg.type === "stop" || msg.type === "reset") {
+        } else if (msg.type === "stop" || msg.type === "reset") {
           if (intervalId) clearInterval(intervalId);
         }
       };
@@ -100,28 +88,21 @@ export function useTimer(n: number, m: number, intervalVolume: number, finishVol
       const d = ev.data;
       if (d.type === "tick") {
         setState(s => ({ ...s, remainingSeconds: d.remainingSeconds }));
-      } 
-      else if (d.type === "interval") {
+      } else if (d.type === "interval") {
         const remMin = Math.round(d.remainingSeconds / 60);
-        
         unlockAudio().then(() => {
           playIntervalSound(intervalVolRef.current);
-          
           if (remMin > 0 && 'speechSynthesis' in window) {
             window.speechSynthesis.cancel();
-            // Склеиваем строку текста
             const text = "Осталось " + remMin + " " + getMinuteDeclension(remMin);
             const msg = new SpeechSynthesisUtterance(text);
             msg.lang = 'ru-RU';
-            msg.rate = 1.0; 
             window.speechSynthesis.speak(msg);
           }
         });
-        
         notifyInterval(remMin);
         triggerTelegramAlert("Осталось " + remMin + " мин!");
-      } 
-      else if (d.type === "finished") {
+      } else if (d.type === "finished") {
         unlockAudio().then(() => playFinishSound(finishVolRef.current));
         notifyFinished();
         triggerTelegramAlert("🏁 Таймер завершен!");
@@ -129,80 +110,40 @@ export function useTimer(n: number, m: number, intervalVolume: number, finishVol
       }
     };
 
-    return () => {
-      worker.terminate();
-    };
+    return () => worker.terminate();
   }, []);
 
   const start = useCallback(async () => {
     await requestNotificationPermission();
     await unlockAudio();
-    
-    // "Пинок" для iOS аудио
     if ('speechSynthesis' in window) {
-       const dummy = new SpeechSynthesisUtterance("");
-       dummy.volume = 0;
-       window.speechSynthesis.speak(dummy);
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
     }
-
     const total = n * 60;
     const interval = m * 60;
-    
-    setState(s => ({ 
-      ...s, 
-      isRunning: true, 
-      isPaused: false, 
-      remainingSeconds: total,
-      totalSeconds: total,
-      intervalSeconds: interval
-    }));
-    
-    workerRef.current?.postMessage({ 
-      type: "start", 
-      totalSeconds: total, 
-      intervalSeconds: interval 
-    });
+    setState(s => ({ ...s, isRunning: true, isPaused: false, totalSeconds: total, remainingSeconds: total }));
+    workerRef.current?.postMessage({ type: "start", totalSeconds: total, intervalSeconds: interval });
   }, [n, m]);
 
-  const pause = useCallback(() => {
+  const pause = () => {
     workerRef.current?.postMessage({ type: "pause" });
     setState(s => ({ ...s, isPaused: true }));
-  }, []);
+  };
 
-  const resume = useCallback(() => {
+  const resume = () => {
     workerRef.current?.postMessage({ type: "resume" });
     setState(s => ({ ...s, isPaused: false }));
-  }, []);
+  };
 
-  const stop = useCallback(() => {
+  const stop = () => {
     workerRef.current?.postMessage({ type: "stop" });
     setState(s => ({ ...s, isRunning: false }));
-  }, []);
+  };
 
-  const reset = useCallback(() => {
+  const reset = () => {
     workerRef.current?.postMessage({ type: "reset" });
-    setState(s => ({ 
-      ...s, 
-      isRunning: false, 
-      isPaused: false,
-      remainingSeconds: n * 60 
-    }));
-  }, [n]);
-
-  // Синхронизация при изменении инпутов (если таймер стоит)
-  useEffect(() => {
-    setState(prev => {
-      if (!prev.isRunning) {
-        return { 
-          ...prev, 
-          totalSeconds: n * 60,
-          remainingSeconds: n * 60,
-          intervalSeconds: m * 60
-        };
-      }
-      return prev;
-    });
-  }, [n, m]);
+    setState(s => ({ ...s, isRunning: false, isPaused: false, remainingSeconds: n * 60 }));
+  };
 
   return { state, start, pause, resume, stop, reset };
 }
