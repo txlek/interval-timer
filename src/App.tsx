@@ -44,25 +44,41 @@ function App() {
           <div className="w-full grid grid-cols-2 gap-3">
             <div>
               <label className="text-xs text-slate-500 block mb-1">Всего (N) мин</label>
-              <input
-                type="number"
-                min={1}
-                max={120}
-                value={n}
-                onChange={(e) => setN(Math.max(1, Math.min(120, parseInt(e.target.value) || 1)))}
-                className="w-full rounded-lg bg-slate-800 border border-slate-600 px-3 py-2 text-white"
-              />
+              {/* Инпут для N (Всего) */}
+<input
+  type="number"
+  value={n === 0 ? "" : n} // Если 0, показываем пустую строку
+  onChange={(e) => {
+    const val = e.target.value;
+    if (val === "") {
+      setN(0); // Временно ставим 0, чтобы можно было стереть
+    } else {
+      const num = parseInt(val);
+      setN(isNaN(num) ? 0 : num);
+    }
+  }}
+  onBlur={() => { if (n < 1) setN(1); }} // Если ушли из поля, а там пусто — ставим 1
+  className="w-full rounded-lg bg-slate-800 border border-slate-600 px-3 py-2 text-white"
+/>
             </div>
             <div>
               <label className="text-xs text-slate-500 block mb-1">Интервал (M) мин</label>
-              <input
-                type="number"
-                min={1}
-                max={n}
-                value={m}
-                onChange={(e) => setM(Math.max(1, Math.min(n, parseInt(e.target.value) || 1)))}
-                className="w-full rounded-lg bg-slate-800 border border-slate-600 px-3 py-2 text-white"
-              />
+              {/* Аналогично для M (Интервал) */}
+<input
+  type="number"
+  value={m === 0 ? "" : m}
+  onChange={(e) => {
+    const val = e.target.value;
+    if (val === "") {
+      setM(0);
+    } else {
+      const num = parseInt(val);
+      setM(isNaN(num) ? 0 : num);
+    }
+  }}
+  onBlur={() => { if (m < 1) setM(1); }}
+  className="w-full rounded-lg bg-slate-800 border border-slate-600 px-3 py-2 text-white"
+/>
             </div>
           </div>
         )}

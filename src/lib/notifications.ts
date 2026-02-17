@@ -19,7 +19,6 @@ export function showNotification(title: string, body: string): void {
       icon: "/vite.svg",
       badge: "/vite.svg",
       tag: "interval-timer",
-      renotify: true,
       requireInteraction: false,
     });
 

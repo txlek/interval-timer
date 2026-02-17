@@ -113,14 +113,26 @@ export function useTimer(
         case "tick":
           setState((s) => ({ ...s, remainingSeconds: d.remainingSeconds }));
           break;
-        case "interval": {
-          const intervalMin = d.intervalMinutes ?? m;
-          unlockAudio().then(() => {
-            playIntervalSound(intervalVolRef.current);
-          });
-          notifyInterval(intervalMin);
-          triggerTelegramAlert(`Прошло еще ${intervalMin} мин! Не отвлекайся.`);
-          break;
+          case "interval": {
+            // Высчитываем, сколько минут осталось до конца (округляем)
+            const remainingMin = Math.round(d.remainingSeconds / 60);
+            
+            unlockAudio().then(() => {
+              playIntervalSound(intervalVolRef.current);
+              
+              // ДОБАВЛЯЕМ ГОЛОС (используем браузерный синтез речи)
+              if (remainingMin > 0) {
+                const utterance = new SpeechSynthesisUtterance(`Осталось ${remainingMin} минут`);
+                utterance.lang = 'ru-RU';
+                window.speechSynthesis.speak(utterance);
+              }
+            });
+          
+            notifyInterval(remainingMin);
+            
+            // Обновляем текст в Telegram, чтобы он тоже показывал остаток
+            triggerTelegramAlert(`Осталось ${remainingMin} мин! Продолжай в том же духе.`);
+            break;
         }
         case "finished":
           unlockAudio().then(() => {
