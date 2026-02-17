@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import type { TimerMessage, TimerResponse } from "@/workers/timer.worker";
+// Если какие-то пути подсвечены красным - не страшно, главное чтобы сами файлы существовали
 import { playIntervalSound, playFinishSound, unlockAudio } from "@/lib/audioEngine";
 import { notifyInterval, notifyFinished, requestNotificationPermission } from "@/lib/notifications";
 import { triggerTelegramAlert } from "@/lib/telegram";
@@ -12,8 +12,8 @@ export interface TimerState {
   intervalSeconds: number;
 }
 
-// 1. Вспомогательная функция (находится ВНЕ основного хука)
-function getMinuteDeclension(n: number) {
+// Эта функция должна быть ВНЕ хука useTimer
+function getMinuteDeclension(n: number): string {
   const absN = Math.abs(n) % 100;
   const n1 = absN % 10;
   if (absN > 10 && absN < 20) return "минут";
@@ -22,12 +22,7 @@ function getMinuteDeclension(n: number) {
   return "минут";
 }
 
-export function useTimer(
-  n: number,
-  m: number,
-  intervalVolume: number,
-  finishVolume: number
-) {
+export function useTimer(n: number, m: number, intervalVolume: number, finishVolume: number) {
   const [state, setState] = useState<TimerState>({
     remainingSeconds: n * 60,
     totalSeconds: n * 60,
@@ -35,218 +30,177 @@ export function useTimer(
     isPaused: false,
     intervalSeconds: m * 60,
   });
+
   const workerRef = useRef<Worker | null>(null);
   const intervalVolRef = useRef(intervalVolume);
   const finishVolRef = useRef(finishVolume);
+  
+  // Обновляем рефы при изменении громкости
   intervalVolRef.current = intervalVolume;
   finishVolRef.current = finishVolume;
 
   useEffect(() => {
-    const blob = new Blob(
-      [`
-        const intervalMarks = new Set();
-        let intervalId = null;
-        let remainingSeconds = 0;
-        let totalSeconds = 0;
-        let intervalSeconds = 0;
-        let isPaused = false;
-        let startTime = 0;
+    // ВЕСЬ КОД ВОРКЕРА В ОДНОЙ СТРОКЕ (безопасно для копирования)
+    // Мы используем обычную строку, чтобы избежать конфликтов с кавычками
+    const workerCode = `
+      let intervalId = null;
+      let remainingSeconds = 0;
+      let totalSeconds = 0;
+      let intervalSeconds = 0;
+      let isPaused = false;
+      const intervalMarks = new Set();
 
-        function scheduleNextTick() {
+      function tick() {
+        if (isPaused) return;
+        remainingSeconds--;
+        self.postMessage({ type: "tick", remainingSeconds: remainingSeconds });
+        
+        if (intervalMarks.has(remainingSeconds)) {
+          self.postMessage({ type: "interval", remainingSeconds: remainingSeconds });
+        }
+        
+        if (remainingSeconds <= 0) {
+          self.postMessage({ type: "finished" });
+          clearInterval(intervalId);
+        }
+      }
+
+      self.onmessage = function(e) {
+        const msg = e.data;
+        if (msg.type === "start") {
+          remainingSeconds = msg.totalSeconds;
+          totalSeconds = msg.totalSeconds;
+          intervalSeconds = msg.intervalSeconds;
+          isPaused = false;
+          intervalMarks.clear();
+          // Рассчитываем точки срабатывания
+          for (let s = totalSeconds - intervalSeconds; s > 0; s -= intervalSeconds) {
+            intervalMarks.add(s);
+          }
           if (intervalId) clearInterval(intervalId);
-          if (remainingSeconds <= 0) return;
-          const now = Date.now();
-          const targetTime = startTime + (totalSeconds - remainingSeconds) * 1000;
-          const delay = Math.max(0, targetTime - now);
-          intervalId = setTimeout(() => {
-            tick();
-            if (remainingSeconds > 0 && !isPaused) scheduleNextTick();
-          }, Math.min(delay, 1000));
+          intervalId = setInterval(tick, 1000);
+        } 
+        else if (msg.type === "pause") {
+          isPaused = true;
+        } 
+        else if (msg.type === "resume") {
+          isPaused = false;
+        } 
+        else if (msg.type === "stop" || msg.type === "reset") {
+          if (intervalId) clearInterval(intervalId);
         }
+      };
+    `;
 
-        function tick() {
-          if (isPaused) return;
-          remainingSeconds--;
-          self.postMessage({ type: "tick", remainingSeconds, totalSeconds });
-          if (intervalMarks.has(remainingSeconds)) {
-            self.postMessage({ type: "interval", remainingSeconds, intervalMinutes: Math.round(intervalSeconds/60) });
-          }
-          if (remainingSeconds <= 0) {
-            self.postMessage({ type: "finished", totalMinutes: Math.round(totalSeconds/60), intervalMinutes: Math.round(intervalSeconds/60) });
-            if (intervalId) { clearTimeout(intervalId); intervalId = null; }
-          }
-        }
-
-        self.onmessage = (e) => {
-          const msg = e.data;
-          switch (msg.type) {
-            case "start":
-              if (intervalId) clearTimeout(intervalId);
-              totalSeconds = msg.totalSeconds;
-              remainingSeconds = msg.totalSeconds;
-              intervalSeconds = msg.intervalSeconds;
-              isPaused = false;
-              startTime = Date.now();
-              intervalMarks.clear();
-              for (let s = totalSeconds - intervalSeconds; s > 0; s -= intervalSeconds) {
-                intervalMarks.add(s);
-              }
-              intervalMarks.add(0);
-              scheduleNextTick();
-              break;
-            case "pause":
-              isPaused = true;
-              if (intervalId) { clearTimeout(intervalId); intervalId = null; }
-              break;
-            case "resume":
-              if (!isPaused) break;
-              isPaused = false;
-              startTime = Date.now() - (totalSeconds - remainingSeconds) * 1000;
-              scheduleNextTick();
-              break;
-            case "reset":
-            case "stop":
-              if (intervalId) { clearTimeout(intervalId); intervalId = null; }
-              self.postMessage({ type: "stopped" });
-              break;
-          }
-        };
-      `],
-      { type: "application/javascript" }
-    );
+    const blob = new Blob([workerCode], { type: "application/javascript" });
     const worker = new Worker(URL.createObjectURL(blob));
     workerRef.current = worker;
 
-    const handler = (ev: MessageEvent<TimerResponse>) => {
+    worker.onmessage = (ev) => {
       const d = ev.data;
-      switch (d.type) {
-        case "tick":
-          setState((s) => ({ ...s, remainingSeconds: d.remainingSeconds }));
-          break;
-        case "interval": {
-          const remainingMin = Math.round(d.remainingSeconds / 60);
-          
-          unlockAudio().then(() => {
-            playIntervalSound(intervalVolRef.current);
-            
-            if (remainingMin > 0 && 'speechSynthesis' in window) {
-              // Создаем фразу
-              const text = `Осталось ${remainingMin} ${getMinuteDeclension(remainingMin)}`;
-              const message = new SpeechSynthesisUtterance(text);
-              
-              message.lang = 'ru-RU';
-              message.rate = 0.9;
-              message.volume = 1.0;
+      if (d.type === "tick") {
+        setState(s => ({ ...s, remainingSeconds: d.remainingSeconds }));
+      } 
+      else if (d.type === "interval") {
+        const remMin = Math.round(d.remainingSeconds / 60);
         
-              // Даем небольшую паузу после писка (500мс), чтобы звуки не смешивались
-              setTimeout(() => {
-                window.speechSynthesis.speak(message);
-              }, 500);
-            }
-          });
+        unlockAudio().then(() => {
+          playIntervalSound(intervalVolRef.current);
           
-          notifyInterval(remainingMin);
-          triggerTelegramAlert(`Осталось ${remainingMin} мин!`);
-          break;
-        }
-        case "finished":
-          unlockAudio().then(() => {
-            playFinishSound(finishVolRef.current);
-          });
-          notifyFinished();
-          triggerTelegramAlert(`🏁 Таймер завершен!`);
-          setState((s) => ({ ...s, remainingSeconds: 0, isRunning: false, isPaused: false }));
-          break;
-        case "stopped":
-          setState((s) => ({ ...s, isRunning: false, isPaused: false }));
-          break;
+          if (remMin > 0 && 'speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+            // Склеиваем строку текста
+            const text = "Осталось " + remMin + " " + getMinuteDeclension(remMin);
+            const msg = new SpeechSynthesisUtterance(text);
+            msg.lang = 'ru-RU';
+            msg.rate = 1.0; 
+            window.speechSynthesis.speak(msg);
+          }
+        });
+        
+        notifyInterval(remMin);
+        triggerTelegramAlert("Осталось " + remMin + " мин!");
+      } 
+      else if (d.type === "finished") {
+        unlockAudio().then(() => playFinishSound(finishVolRef.current));
+        notifyFinished();
+        triggerTelegramAlert("🏁 Таймер завершен!");
+        setState(s => ({ ...s, isRunning: false, remainingSeconds: 0 }));
       }
     };
 
-    worker.addEventListener("message", handler);
     return () => {
-      worker.removeEventListener("message", handler);
       worker.terminate();
-      workerRef.current = null;
     };
-  }, [n, m]);
+  }, []);
 
   const start = useCallback(async () => {
     await requestNotificationPermission();
     await unlockAudio();
-    // ПРИНУДИТЕЛЬНЫЙ ПРОГРЕВ ГОЛОСА
-  if ('speechSynthesis' in window) {
-    // 1. Пытаемся загрузить голоса (важно для Android)
-    window.speechSynthesis.getVoices(); 
-    // 2. Пустое сообщение для разблокировки на iOS
-    const initialMsg = new SpeechSynthesisUtterance("");
-    initialMsg.volume = 0; // Тишина
-    window.speechSynthesis.speak(initialMsg);
-  }
     
-    // Пробуждаем голосовой движок
+    // "Пинок" для iOS аудио
     if ('speechSynthesis' in window) {
-      window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+       const dummy = new SpeechSynthesisUtterance("");
+       dummy.volume = 0;
+       window.speechSynthesis.speak(dummy);
     }
 
     const total = n * 60;
     const interval = m * 60;
-    setState((s) => ({
-      ...s,
+    
+    setState(s => ({ 
+      ...s, 
+      isRunning: true, 
+      isPaused: false, 
       remainingSeconds: total,
       totalSeconds: total,
-      intervalSeconds: interval,
-      isRunning: true,
-      isPaused: false,
+      intervalSeconds: interval
     }));
-    workerRef.current?.postMessage({
-      type: "start",
-      totalSeconds: total,
-      intervalSeconds: interval,
-    } as TimerMessage);
-  }, [n, m]);
-
-  const pause = useCallback(() => {
-    workerRef.current?.postMessage({ type: "pause" } as TimerMessage);
-    setState((s) => ({ ...s, isPaused: true }));
-  }, []);
-
-  const resume = useCallback(() => {
-    workerRef.current?.postMessage({ type: "resume" } as TimerMessage);
-    setState((s) => ({ ...s, isPaused: false }));
-  }, []);
-
-  const stop = useCallback(() => {
-    workerRef.current?.postMessage({ type: "stop" } as TimerMessage);
-    setState((s) => ({
-      ...s,
-      remainingSeconds: n * 60,
-      totalSeconds: n * 60,
-      isRunning: false,
-      isPaused: false,
-    }));
-  }, [n]);
-
-  const reset = useCallback(() => {
-    workerRef.current?.postMessage({ type: "reset" } as TimerMessage);
-    const total = n * 60;
-    setState({
-      remainingSeconds: total,
-      totalSeconds: total,
-      intervalSeconds: m * 60,
-      isRunning: false,
-      isPaused: false,
+    
+    workerRef.current?.postMessage({ 
+      type: "start", 
+      totalSeconds: total, 
+      intervalSeconds: interval 
     });
   }, [n, m]);
 
+  const pause = useCallback(() => {
+    workerRef.current?.postMessage({ type: "pause" });
+    setState(s => ({ ...s, isPaused: true }));
+  }, []);
+
+  const resume = useCallback(() => {
+    workerRef.current?.postMessage({ type: "resume" });
+    setState(s => ({ ...s, isPaused: false }));
+  }, []);
+
+  const stop = useCallback(() => {
+    workerRef.current?.postMessage({ type: "stop" });
+    setState(s => ({ ...s, isRunning: false }));
+  }, []);
+
+  const reset = useCallback(() => {
+    workerRef.current?.postMessage({ type: "reset" });
+    setState(s => ({ 
+      ...s, 
+      isRunning: false, 
+      isPaused: false,
+      remainingSeconds: n * 60 
+    }));
+  }, [n]);
+
+  // Синхронизация при изменении инпутов (если таймер стоит)
   useEffect(() => {
-    const total = n * 60;
-    const interval = m * 60;
-    setState((s) => {
-      if (!s.isRunning) {
-        return { ...s, remainingSeconds: total, totalSeconds: total, intervalSeconds: interval };
+    setState(prev => {
+      if (!prev.isRunning) {
+        return { 
+          ...prev, 
+          totalSeconds: n * 60,
+          remainingSeconds: n * 60,
+          intervalSeconds: m * 60
+        };
       }
-      return s;
+      return prev;
     });
   }, [n, m]);
 

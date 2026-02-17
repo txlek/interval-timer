@@ -1,193 +1,118 @@
-import { useEffect, useRef, useState, useCallback } from "react";
-import { TimerResponse } from "@/workers/timer.worker";
-import { playIntervalSound, playFinishSound, unlockAudio } from "@/lib/audioEngine";
-import { notifyInterval, notifyFinished, requestNotificationPermission } from "@/lib/notifications";
-import { triggerTelegramAlert } from "@/lib/telegram";
+import { useState, useCallback } from "react";
+import { CircularProgress } from "@/components/CircularProgress";
+import { TimerControls } from "@/components/TimerControls";
+import { AudioUploadZone } from "@/components/AudioUploadZone";
+import { UnlockButton } from "@/components/UnlockButton";
+import { useTimer } from "@/hooks/useTimer";
 
-export interface TimerState {
-  remainingSeconds: number;
-  totalSeconds: number;
-  isRunning: boolean;
-  isPaused: boolean;
-  intervalSeconds: number;
-}
+function App() {
+  const [n, setN] = useState(15);
+  const [m, setM] = useState(2);
+  const [intervalVolume, setIntervalVolume] = useState(0.8);
+  const [finishVolume, setFinishVolume] = useState(1);
 
-// Функция склонения (вне хука)
-function getMinuteDeclension(n: number) {
-  const absN = Math.abs(n) % 100;
-  const n1 = absN % 10;
-  if (absN > 10 && absN < 20) return "минут";
-  if (n1 > 1 && n1 < 5) return "минуты";
-  if (n1 === 1) return "минута";
-  return "минут";
-}
+  // Вызываем хук. Важно: порядок аргументов должен совпадать с useTimer.ts
+  const { state, start, pause, resume, stop, reset } = useTimer(
+    n || 1, 
+    m || 1,
+    intervalVolume,
+    finishVolume
+  );
 
-export function useTimer(
-  n: number,
-  m: number,
-  intervalVolume: number,
-  finishVolume: number
-) {
-  const [state, setState] = useState<TimerState>({
-    remainingSeconds: n * 60,
-    totalSeconds: n * 60,
-    isRunning: false,
-    isPaused: false,
-    intervalSeconds: m * 60,
-  });
+  const handleResetAudio = useCallback(() => {}, []);
 
-  const workerRef = useRef<Worker | null>(null);
-  const intervalVolRef = useRef(intervalVolume);
-  const finishVolRef = useRef(finishVolume);
-  
-  intervalVolRef.current = intervalVolume;
-  finishVolRef.current = finishVolume;
-
-  useEffect(() => {
-    const blob = new Blob(
-      [`
-        let intervalId = null;
-        let remainingSeconds = 0;
-        let totalSeconds = 0;
-        let intervalSeconds = 0;
-        let isPaused = false;
-        let startTime = 0;
-        const intervalMarks = new Set();
-
-        function scheduleNextTick() {
-          if (intervalId) clearInterval(intervalId);
-          if (remainingSeconds <= 0) return;
-          const now = Date.now();
-          const targetTime = startTime + (totalSeconds - remainingSeconds) * 1000;
-          const delay = Math.max(0, targetTime - now);
-          intervalId = setTimeout(() => {
-            tick();
-            if (remainingSeconds > 0 && !isPaused) scheduleNextTick();
-          }, Math.min(delay, 1000));
-        }
-
-        function tick() {
-          if (isPaused) return;
-          remainingSeconds--;
-          self.postMessage({ type: "tick", remainingSeconds, totalSeconds });
-          if (intervalMarks.has(remainingSeconds)) {
-            self.postMessage({ type: "interval", remainingSeconds });
-          }
-          if (remainingSeconds <= 0) {
-            self.postMessage({ type: "finished" });
-            if (intervalId) { clearTimeout(intervalId); intervalId = null; }
-          }
-        }
-
-        self.onmessage = (e) => {
-          const msg = e.data;
-          switch (msg.type) {
-            case "start":
-              totalSeconds = msg.totalSeconds;
-              remainingSeconds = msg.totalSeconds;
-              intervalSeconds = msg.intervalSeconds;
-              isPaused = false;
-              startTime = Date.now();
-              intervalMarks.clear();
-              for (let s = totalSeconds - intervalSeconds; s > 0; s -= intervalSeconds) {
-                intervalMarks.add(s);
-              }
-              scheduleNextTick();
-              break;
-            case "pause": isPaused = true; break;
-            case "resume":
-              isPaused = false;
-              startTime = Date.now() - (totalSeconds - remainingSeconds) * 1000;
-              scheduleNextTick();
-              break;
-            case "stop":
-            case "reset":
-              if (intervalId) { clearTimeout(intervalId); intervalId = null; }
-              self.postMessage({ type: "stopped" });
-              break;
-          }
-        };
-      `],
-      { type: "application/javascript" }
-    );
-
-    const worker = new Worker(URL.createObjectURL(blob));
-    workerRef.current = worker;
-
-    const handler = (ev: MessageEvent<TimerResponse>) => {
-      const d = ev.data;
-      switch (d.type) {
-        case "tick":
-          setState((s) => ({ ...s, remainingSeconds: d.remainingSeconds }));
-          break;
-        case "interval": {
-          const remMin = Math.round(d.remainingSeconds / 60);
-          unlockAudio().then(() => {
-            playIntervalSound(intervalVolRef.current);
-            if (remMin > 0 && 'speechSynthesis' in window) {
-              window.speechSynthesis.cancel();
-              const text = `Осталось ${remMin} ${getMinuteDeclension(remMin)}`;
-              const msg = new SpeechSynthesisUtterance(text);
-              msg.lang = 'ru-RU';
-              window.speechSynthesis.speak(msg);
-            }
-          });
-          notifyInterval(remMin);
-          triggerTelegramAlert(`Осталось ${remMin} мин!`);
-          break;
-        }
-        case "finished":
-          unlockAudio().then(() => playFinishSound(finishVolRef.current));
-          notifyFinished();
-          triggerTelegramAlert("🏁 Таймер завершен!");
-          setState((s) => ({ ...s, isRunning: false, remainingSeconds: 0 }));
-          break;
-        case "stopped":
-          setState((s) => ({ ...s, isRunning: false }));
-          break;
-      }
-    };
-
-    worker.addEventListener("message", handler);
-    return () => {
-      worker.terminate();
-      workerRef.current = null;
-    };
-  }, []);
-
-  const start = useCallback(async () => {
-    await requestNotificationPermission();
-    await unlockAudio();
-    // Пробуждаем голос
+  const testVoice = () => {
     if ('speechSynthesis' in window) {
-      window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+      window.speechSynthesis.cancel();
+      const msg = new SpeechSynthesisUtterance("Проверка голоса. Один, два, три.");
+      msg.lang = 'ru-RU';
+      window.speechSynthesis.speak(msg);
+    } else {
+      alert("Браузер не поддерживает синтез речи");
     }
-
-    const total = n * 60;
-    const interval = m * 60;
-    setState(s => ({ ...s, isRunning: true, isPaused: false, totalSeconds: total, remainingSeconds: total }));
-    workerRef.current?.postMessage({ type: "start", totalSeconds: total, intervalSeconds: interval });
-  }, [n, m]);
-
-  const pause = () => {
-    workerRef.current?.postMessage({ type: "pause" });
-    setState(s => ({ ...s, isPaused: true }));
   };
 
-  const resume = () => {
-    workerRef.current?.postMessage({ type: "resume" });
-    setState(s => ({ ...s, isPaused: false }));
-  };
+  return (
+    <div className="min-h-screen text-slate-100 flex flex-col items-center py-6 px-4 relative">
+      
+      {/* Кнопка теста */}
+      <button 
+        onClick={testVoice}
+        className="fixed top-2 right-2 z-[9999] bg-blue-600 text-white px-3 py-1 rounded text-xs font-bold shadow-lg active:scale-95"
+      >
+        🔈 ГОЛОС
+      </button>
 
-  const stop = () => {
-    workerRef.current?.postMessage({ type: "stop" });
-    setState(s => ({ ...s, isRunning: false }));
-  };
+      <header className="mb-6 text-center">
+        <h1 className="text-2xl font-bold text-white">Таймер</h1>
+        <p className="text-slate-400 text-sm mt-1">
+          Всего: {n} мин • Интервал: {m} мин
+        </p>
+      </header>
 
-  const reset = () => {
-    workerRef.current?.postMessage({ type: "reset" });
-    setState(s => ({ ...s, isRunning: false, remainingSeconds: n * 60 }));
-  };
+      <UnlockButton />
 
-  return { state, start, pause, resume, stop, reset };
+      <div className="flex flex-col items-center gap-8 w-full max-w-md">
+        <CircularProgress
+          totalSeconds={state.totalSeconds}
+          remainingSeconds={state.remainingSeconds}
+          intervalMinutes={m}
+        />
+
+        {!state.isRunning && (
+          <div className="w-full grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Всего (мин)</label>
+              <input
+                type="number"
+                value={n === 0 ? "" : n}
+                onChange={(e) => setN(e.target.value === "" ? 0 : parseInt(e.target.value))}
+                onBlur={() => { if (n < 1) setN(1); }}
+                className="w-full rounded-lg bg-slate-800 border border-slate-600 px-3 py-2 text-white text-center"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Интервал (мин)</label>
+              <input
+                type="number"
+                value={m === 0 ? "" : m}
+                onChange={(e) => setM(e.target.value === "" ? 0 : parseInt(e.target.value))}
+                onBlur={() => { if (m < 1) setM(1); }}
+                className="w-full rounded-lg bg-slate-800 border border-slate-600 px-3 py-2 text-white text-center"
+              />
+            </div>
+          </div>
+        )}
+
+        <TimerControls
+          isRunning={state.isRunning}
+          isPaused={state.isPaused}
+          onStart={start}
+          onPause={pause}
+          onResume={resume}
+          onStop={stop}
+          onReset={reset}
+        />
+
+        <div className="w-full space-y-4">
+          <AudioUploadZone
+            type="interval"
+            label="Звук интервала"
+            volume={intervalVolume}
+            onVolumeChange={setIntervalVolume}
+            onFileSaved={handleResetAudio}
+          />
+          <AudioUploadZone
+            type="finish"
+            label="Звук окончания"
+            volume={finishVolume}
+            onVolumeChange={setFinishVolume}
+            onFileSaved={handleResetAudio}
+          />
+        </div>
+      </div>
+    </div>
+  );
 }
+
+export default App;
