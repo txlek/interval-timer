@@ -12,6 +12,16 @@ export interface TimerState {
   intervalSeconds: number;
 }
 
+// 1. Вспомогательная функция (находится ВНЕ основного хука)
+function getMinuteDeclension(n: number) {
+  const absN = Math.abs(n) % 100;
+  const n1 = absN % 10;
+  if (absN > 10 && absN < 20) return "минут";
+  if (n1 > 1 && n1 < 5) return "минуты";
+  if (n1 === 1) return "минута";
+  return "минут";
+}
+
 export function useTimer(
   n: number,
   m: number,
@@ -113,33 +123,33 @@ export function useTimer(
         case "tick":
           setState((s) => ({ ...s, remainingSeconds: d.remainingSeconds }));
           break;
-          case "interval": {
-            // Высчитываем, сколько минут осталось до конца (округляем)
-            const remainingMin = Math.round(d.remainingSeconds / 60);
-            
-            unlockAudio().then(() => {
-              playIntervalSound(intervalVolRef.current);
-              
-              // ДОБАВЛЯЕМ ГОЛОС (используем браузерный синтез речи)
-              if (remainingMin > 0) {
-                const utterance = new SpeechSynthesisUtterance(`Осталось ${remainingMin} минут`);
-                utterance.lang = 'ru-RU';
-                window.speechSynthesis.speak(utterance);
-              }
-            });
+        case "interval": {
+          const remainingMin = Math.round(d.remainingSeconds / 60);
           
-            notifyInterval(remainingMin);
+          unlockAudio().then(() => {
+            playIntervalSound(intervalVolRef.current);
             
-            // Обновляем текст в Telegram, чтобы он тоже показывал остаток
-            triggerTelegramAlert(`Осталось ${remainingMin} мин! Продолжай в том же духе.`);
-            break;
+            // ОЗВУЧКА ГОЛОСОМ
+            if (remainingMin > 0 && 'speechSynthesis' in window) {
+              window.speechSynthesis.cancel();
+              const text = `Осталось ${remainingMin} ${getMinuteDeclension(remainingMin)}`;
+              const message = new SpeechSynthesisUtterance(text);
+              message.lang = 'ru-RU';
+              message.rate = 0.9;
+              window.speechSynthesis.speak(message);
+            }
+          });
+          
+          notifyInterval(remainingMin);
+          triggerTelegramAlert(`Осталось ${remainingMin} мин!`);
+          break;
         }
         case "finished":
           unlockAudio().then(() => {
             playFinishSound(finishVolRef.current);
           });
           notifyFinished();
-          triggerTelegramAlert(`🏁 Таймер завершен! Пора отдохнуть.`);
+          triggerTelegramAlert(`🏁 Таймер завершен!`);
           setState((s) => ({ ...s, remainingSeconds: 0, isRunning: false, isPaused: false }));
           break;
         case "stopped":
@@ -147,6 +157,7 @@ export function useTimer(
           break;
       }
     };
+
     worker.addEventListener("message", handler);
     return () => {
       worker.removeEventListener("message", handler);
@@ -158,6 +169,12 @@ export function useTimer(
   const start = useCallback(async () => {
     await requestNotificationPermission();
     await unlockAudio();
+    
+    // Пробуждаем голосовой движок
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+    }
+
     const total = n * 60;
     const interval = m * 60;
     setState((s) => ({
