@@ -30,7 +30,7 @@ npm install
 npm run dev
 ```
 
-Open http://localhost:5173
+Open localhost
 
 ### Build
 
@@ -44,8 +44,8 @@ npm run preview
 To send interval reminders to Telegram, run the server and set env vars:
 
 ```bash
-set TELEGRAM_BOT_TOKEN=8580855158:AAH_6G1sxG8NZYb6Qfv8CGC7CECfDtHfajU
-set TELEGRAM_CHAT_ID=875584140
+set TELEGRAM_BOT_TOKEN
+set TELEGRAM_CHAT_ID
 npm run server
 ```
 
