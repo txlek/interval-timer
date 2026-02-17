@@ -129,14 +129,19 @@ export function useTimer(
           unlockAudio().then(() => {
             playIntervalSound(intervalVolRef.current);
             
-            // ОЗВУЧКА ГОЛОСОМ
             if (remainingMin > 0 && 'speechSynthesis' in window) {
-              window.speechSynthesis.cancel();
+              // Создаем фразу
               const text = `Осталось ${remainingMin} ${getMinuteDeclension(remainingMin)}`;
               const message = new SpeechSynthesisUtterance(text);
+              
               message.lang = 'ru-RU';
               message.rate = 0.9;
-              window.speechSynthesis.speak(message);
+              message.volume = 1.0;
+        
+              // Даем небольшую паузу после писка (500мс), чтобы звуки не смешивались
+              setTimeout(() => {
+                window.speechSynthesis.speak(message);
+              }, 500);
             }
           });
           
@@ -169,6 +174,15 @@ export function useTimer(
   const start = useCallback(async () => {
     await requestNotificationPermission();
     await unlockAudio();
+    // ПРИНУДИТЕЛЬНЫЙ ПРОГРЕВ ГОЛОСА
+  if ('speechSynthesis' in window) {
+    // 1. Пытаемся загрузить голоса (важно для Android)
+    window.speechSynthesis.getVoices(); 
+    // 2. Пустое сообщение для разблокировки на iOS
+    const initialMsg = new SpeechSynthesisUtterance("");
+    initialMsg.volume = 0; // Тишина
+    window.speechSynthesis.speak(initialMsg);
+  }
     
     // Пробуждаем голосовой движок
     if ('speechSynthesis' in window) {

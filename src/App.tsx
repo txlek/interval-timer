@@ -110,6 +110,16 @@ function App() {
             onFileSaved={handleResetAudio}
           />
         </div>
+        <button 
+  onClick={() => {
+    const msg = new SpeechSynthesisUtterance("Проверка связи. Раз, два, три.");
+    msg.lang = 'ru-RU';
+    window.speechSynthesis.speak(msg);
+  }}
+  className="mt-4 p-2 bg-white/10 rounded-lg text-xs"
+>
+  Проверить голос
+</button>
       </div>
     </div>
   );
