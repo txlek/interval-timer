@@ -1,24 +1,53 @@
-const BOT_TOKEN = "8580855158:AAH_6G1sxG8NZYb6Qfv8CGC7CECfDtHfajU";
+import { Express } from "express";
 
-async function sendAlert(text: string) {
-  const chatId = "ТВОЙ_ID_КОТОРЫЙ_ТЫ_ЗАПИСАЛ"; 
+// Берем токен из переменных окружения
+const BOT_TOKEN = process.env.BOT_TOKEN;
+
+async function sendAlert(chatId: string | number, text: string) {
+  if (!BOT_TOKEN) {
+    console.error("Ошибка: BOT_TOKEN не найден в process.env");
+    return;
+  }
+
   const url = `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`;
 
   try {
-    await fetch(url, {
+    const response = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ chat_id: chatId, text: text })
+      body: JSON.stringify({ 
+        chat_id: chatId, 
+        text: text,
+        parse_mode: "HTML" 
+      })
     });
-    console.log("Уведомление отправлено в Telegram!");
+
+    if (!response.ok) {
+      const error = await response.json();
+      console.error("Telegram API Error:", error);
+    } else {
+      console.log(`Уведомление отправлено в чат ${chatId}`);
+    }
   } catch (err) {
-    console.error("Ошибка отправки:", err);
+    console.error("Ошибка сети при отправке в TG:", err);
   }
 }
 
-// Создадим путь, который будет вызывать фронтенд
-app.post("/api/alert", async (req, res) => {
-  const { message } = req.body;
-  await sendAlert(message);
-  res.sendStatus(200);
-});
+// Экспортируем функцию, которая "регистрирует" маршруты в приложении
+export function registerRoutes(app: Express) {
+  app.post("/api/alert", async (req, res) => {
+    // Получаем и сообщение, и ID чата прямо из тела запроса (с фронтенда)
+    const { chatId, message } = req.body;
+
+    if (!chatId || !message) {
+      return res.status(400).json({ error: "Не указан chatId или message" });
+    }
+
+    try {
+      await sendAlert(chatId, message);
+      res.sendStatus(200);
+    } catch (error) {
+      res.status(500).json({ error: "Ошибка при отправке уведомления" });
+    }
+  });
+}

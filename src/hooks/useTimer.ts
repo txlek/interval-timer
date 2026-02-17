@@ -106,12 +106,15 @@ export function useTimer(n: number, m: number, intervalVolume: number, finishVol
         unlockAudio().then(() => playFinishSound(finishVolRef.current));
         notifyFinished();
         triggerTelegramAlert("🏁 Таймер завершен!");
-        setState(s => ({ ...s, isRunning: false, remainingSeconds: 0 }));
+        setState(s => ({ ...s, isRunning: false, 
+          isPaused: false, // Ensure this is reset
+          remainingSeconds: 0 
+        }));
       }
-    };
-
+    }
     return () => worker.terminate();
   }, []);
+  
 
   const start = useCallback(async () => {
     await requestNotificationPermission();
@@ -125,20 +128,20 @@ export function useTimer(n: number, m: number, intervalVolume: number, finishVol
     workerRef.current?.postMessage({ type: "start", totalSeconds: total, intervalSeconds: interval });
   }, [n, m]);
 
-  const pause = () => {
+  const pause = useCallback(() => {
     workerRef.current?.postMessage({ type: "pause" });
     setState(s => ({ ...s, isPaused: true }));
-  };
+  }, []);
 
-  const resume = () => {
+  const resume = useCallback(() => {
     workerRef.current?.postMessage({ type: "resume" });
     setState(s => ({ ...s, isPaused: false }));
-  };
+  }, []);
 
-  const stop = () => {
+  const stop = useCallback(() => {
     workerRef.current?.postMessage({ type: "stop" });
     setState(s => ({ ...s, isRunning: false }));
-  };
+  }, []);
 
  // Заменяем старую функцию reset на эту, чтобы она учитывала новые n и m
  const reset = useCallback(() => {
@@ -154,16 +157,30 @@ export function useTimer(n: number, m: number, intervalVolume: number, finishVol
 }, [n, m]);
 
 useEffect(() => {
- 
+  // Обновляем визуальную часть только если таймер НЕ запущен
   if (!state.isRunning) {
-    setState(prev => ({
-      ...prev,
-      remainingSeconds: n * 60,
-      totalSeconds: n * 60,
-      intervalSeconds: m * 60,
-    }));
+    const total = n * 60;
+    setState(prev => {
+      if (prev.totalSeconds === total && prev.intervalSeconds === m * 60) {
+        return prev;
+      }
+      return {
+        ...prev,
+        totalSeconds: total,
+        remainingSeconds: total,
+        intervalSeconds: m * 60,
+      };
+    });
   }
 }, [n, m, state.isRunning]);
 
-return { state, start, pause, resume, stop, reset };
+// --- ADD THIS RETURN STATEMENT ---
+return {
+  state,
+  start,
+  pause,
+  resume,
+  stop,
+  reset
+};
 }
